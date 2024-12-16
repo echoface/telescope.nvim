@@ -504,55 +504,45 @@ function make_entry.gen_from_lsp_symbols(opts)
   -- Default we have two columns, symbol and type(unbound)
   -- If path is not hidden then its, filepath, symbol and type(still unbound)
   -- If show_line is also set, type is bound to len 8
+  -- [{symbol_type} | symbol | {fpath} | {remaining}]
   local display_items = {
+    { width = opts.symbol_type_width or 8 },
     { width = opts.symbol_width or 25 },
     { remaining = true },
   }
 
   local hidden = utils.is_path_hidden(opts)
   if not hidden then
-    table.insert(display_items, 1, { width = vim.F.if_nil(opts.fname_width, 30) })
-  end
-
-  if opts.show_line then
-    -- bound type to len 8 or custom
-    table.insert(display_items, #display_items, { width = opts.symbol_type_width or 8 })
+    table.insert(display_items, #display_items, { width = vim.F.if_nil(opts.fname_width, 30) })
   end
 
   local displayer = entry_display.create {
-    separator = " ",
+    separator = "|",
     hl_chars = { ["["] = "TelescopeBorder", ["]"] = "TelescopeBorder" },
     items = display_items,
   }
   local type_highlight = vim.F.if_nil(opts.symbol_highlights or lsp_type_highlight)
 
   local make_display = function(entry)
-    local msg
 
-    if opts.show_line then
-      msg = vim.trim(vim.F.if_nil(vim.api.nvim_buf_get_lines(bufnr, entry.lnum - 1, entry.lnum, false)[1], ""))
-    end
-
-    if hidden then
-      return displayer {
-        entry.symbol_name,
+    local items = {
         { entry.symbol_type:lower(), type_highlight[entry.symbol_type] },
-        msg,
-      }
-    else
+        entry.symbol_name,
+    }
+
+    if not hidden then
       local display_path, path_style = utils.transform_path(opts, entry.filename)
-      return displayer {
-        {
-          display_path,
-          function()
-            return path_style
-          end,
-        },
-        entry.symbol_name,
-        { entry.symbol_type:lower(), type_highlight[entry.symbol_type] },
-        msg,
-      }
+      table.insert(items, {display_path, function() return path_style end,})
     end
+
+    local msg = ""
+    if opts.show_line then
+        local line_text = vim.api.nvim_buf_get_lines(bufnr, entry.lnum - 1, entry.lnum, false)[1]
+        msg = vim.trim(vim.F.if_nil(line_text, ""))
+    end
+    table.insert(items, msg)
+
+    return displayer(items)
   end
 
   local get_filename = get_filename_fn()
